@@ -68,40 +68,71 @@ def fake_ogg_decoder(input_file, output_ext):
 def convert_file(engine, input_file, output_ext):
     base = os.path.splitext(input_file)[0]
     output_path = f"{base}.{output_ext}"
-    if engine == "FFmpeg":
-        ffmpeg.input(input_file).output(output_path).run(overwrite_output=True)
-    elif engine == "VGMStream":
-        subprocess.run([VGMS_CLI_PATH, input_file, "-o", output_path], check=True)
-    elif engine == "TEX-Stripper":
-        with open(input_file, "rb") as f:
-            tex_data = f.read()
-        if output_ext == "dds":
-            with open(output_path, "wb") as out:
-                out.write(tex_data)
-        elif output_ext == "png":
-            dds_path = f"{base}.dds"
-            with open(dds_path, "wb") as out:
-                out.write(tex_data)
-            img = Image.open(dds_path)
-            img.save(output_path)
-        elif output_ext == "wav":
-            with open(output_path, "wb") as f:
-                f.write(b"RIFF....WAVEfmt ")
-    elif engine in ["TEX-StreamInfo", "TEX-CharMap", "TEX-Script"]:
-        with open(input_file, "rb") as f:
-            data = f.read()
-        with open(output_path, "w", encoding="utf-8") as out:
-            out.write(data.decode("utf-8", errors="ignore"))
-    elif engine == "TEX-RES-Binder":
-        with open(output_path, "w", encoding="utf-8") as out:
-            out.write("RES/IMG binder or compressed asset. No direct image data available.")
-    elif engine == "OGG-FakeDecoder":
-        fake_ogg_decoder(input_file, output_ext)
-    else:
-        raise ValueError("Unsupported engine")
 
-# === GUI MODE ===
+    try:
+        if engine == "FFmpeg":
+            ffmpeg.input(input_file).output(output_path).run(overwrite_output=True)
 
+        elif engine == "VGMStream":
+            subprocess.run([VGMS_CLI_PATH, input_file, "-o", output_path], check=True)
+
+        elif engine == "TEX-Stripper":
+            with open(input_file, "rb") as f:
+                tex_data = f.read()
+            if output_ext == "dds":
+                with open(output_path, "wb") as out:
+                    out.write(tex_data)
+            elif output_ext == "png":
+                dds_path = f"{base}.dds"
+                with open(dds_path, "wb") as out:
+                    out.write(tex_data)
+                img = Image.open(dds_path)
+                img.save(output_path)
+            elif output_ext == "wav":
+                with open(output_path, "wb") as f:
+                    f.write(b"RIFF....WAVEfmt ")
+
+        elif engine in ["TEX-StreamInfo", "TEX-CharMap", "TEX-Script"]:
+            with open(input_file, "rb") as f:
+                data = f.read()
+            with open(output_path, "w", encoding="utf-8") as out:
+                out.write(data.decode("utf-8", errors="ignore"))
+
+        elif engine == "TEX-RES-Binder":
+            with open(input_file, "rb") as f:
+                data = f.read()
+
+            readable_strings = []
+            buffer = b""
+            for byte in data:
+                if 32 <= byte < 127:
+                    buffer += bytes([byte])
+                else:
+                    if len(buffer) >= 4:
+                        readable_strings.append(buffer.decode("utf-8", errors="ignore"))
+                    buffer = b""
+
+            with open(output_path, "w", encoding="utf-8") as out:
+                out.write("===== FreqShift - Extracted RES Metadata =====\n")
+                out.write(f"Source File: {os.path.basename(input_file)}\n\n")
+                out.write("Detected Strings:\n")
+                out.write("-----------------\n")
+                for s in readable_strings:
+                    out.write(f"{s}\n")
+
+        elif engine == "OGG-FakeDecoder":
+            fake_ogg_decoder(input_file, output_ext)
+
+        else:
+            raise ValueError("Unsupported engine")
+
+        if engine != "OGG-FakeDecoder":
+            messagebox.showinfo(f"{APP_NAME} - Success", f"File converted to: {output_path}")
+
+    except Exception as e:
+        messagebox.showerror(f"{APP_NAME} - Error", str(e))
+
+# GUI MODE
 def browse_files():
     global dropped_files
     filenames = filedialog.askopenfilenames(title="Select files for FreqShift")
@@ -150,8 +181,7 @@ def show_gui_window():
     progress.pack(pady=10)
     root.mainloop()
 
-# === DRAG/DROP MODE ===
-
+# DRAG/DROP MODE
 def batch_engine_selector(input_files):
     def run_engine(engine_name):
         engine_window.destroy()
@@ -191,10 +221,9 @@ def batch_engine_selector(input_files):
     tk.Button(engine_window, text="🔍 Auto Detect Engine", width=30, bg="lightblue", command=auto_detect_and_run).pack(pady=10)
     engine_window.mainloop()
 
-# === ENTRY POINT ===
-
+# ENTRY POINT
 if __name__ == "__main__":
-    if len(sys.argv) < 2:
+    if "--gui" in sys.argv or len(sys.argv) < 2:
         show_gui_window()
     else:
         batch_engine_selector(sys.argv[1:])
