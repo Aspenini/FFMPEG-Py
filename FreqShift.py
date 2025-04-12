@@ -1,10 +1,13 @@
 import os
 import sys
 import subprocess
+import re
 import tkinter as tk
 from tkinter import messagebox, simpledialog, filedialog, ttk
 import ffmpeg
 from PIL import Image
+from io import BytesIO
+from pathlib import Path
 
 APP_NAME = "FreqShift"
 VGMS_CLI_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vgmstream", "vgmstream-cli.exe")
@@ -65,6 +68,61 @@ def fake_ogg_decoder(input_file, output_ext):
     else:
         raise ValueError("Not a known fake OGG")
 
+def extract_assets_from_res(input_file):
+    with open(input_file, "rb") as f:
+        data = f.read()
+
+    base = os.path.splitext(input_file)[0]
+
+    markers = {
+        "DDS": b"DDS ",
+        "BMP": b"BM",
+        "TTF": b"\x00\x01\x00\x00"
+    }
+
+    for label, sig in markers.items():
+        pos = data.find(sig)
+        if pos != -1:
+            chunk = data[pos:]
+            asset_file = f"{base}_{label}.bin"
+            with open(asset_file, "wb") as out:
+                out.write(chunk)
+
+            # Try to convert to PNG or validate
+            if label == "DDS":
+                try:
+                    image = Image.open(asset_file)
+                    image.load()
+                    image.save(f"{base}_{label}.png", "PNG")
+                except Exception:
+                    pass
+            elif label == "BMP":
+                try:
+                    img = Image.open(BytesIO(chunk))
+                    img.load()
+                    img.save(f"{base}_{label}.png", "PNG")
+                except Exception:
+                    pass
+            elif label == "TTF":
+                pass  # Saved raw for external validation
+
+    # Extract readable ASCII strings
+    strings = []
+    buffer = b""
+    for byte in data:
+        if 32 <= byte < 127:
+            buffer += bytes([byte])
+        else:
+            if len(buffer) >= 4:
+                strings.append(buffer.decode("utf-8", errors="ignore"))
+            buffer = b""
+
+    meta_file = f"{base}.meta"
+    with open(meta_file, "w", encoding="utf-8") as out:
+        out.write("===== Extracted RES Metadata =====\n")
+        for s in strings:
+            out.write(s + "\n")
+
 def convert_file(engine, input_file, output_ext):
     base = os.path.splitext(input_file)[0]
     output_path = f"{base}.{output_ext}"
@@ -72,10 +130,8 @@ def convert_file(engine, input_file, output_ext):
     try:
         if engine == "FFmpeg":
             ffmpeg.input(input_file).output(output_path).run(overwrite_output=True)
-
         elif engine == "VGMStream":
             subprocess.run([VGMS_CLI_PATH, input_file, "-o", output_path], check=True)
-
         elif engine == "TEX-Stripper":
             with open(input_file, "rb") as f:
                 tex_data = f.read()
@@ -91,44 +147,19 @@ def convert_file(engine, input_file, output_ext):
             elif output_ext == "wav":
                 with open(output_path, "wb") as f:
                     f.write(b"RIFF....WAVEfmt ")
-
         elif engine in ["TEX-StreamInfo", "TEX-CharMap", "TEX-Script"]:
             with open(input_file, "rb") as f:
                 data = f.read()
             with open(output_path, "w", encoding="utf-8") as out:
                 out.write(data.decode("utf-8", errors="ignore"))
-
         elif engine == "TEX-RES-Binder":
-            with open(input_file, "rb") as f:
-                data = f.read()
-
-            readable_strings = []
-            buffer = b""
-            for byte in data:
-                if 32 <= byte < 127:
-                    buffer += bytes([byte])
-                else:
-                    if len(buffer) >= 4:
-                        readable_strings.append(buffer.decode("utf-8", errors="ignore"))
-                    buffer = b""
-
-            with open(output_path, "w", encoding="utf-8") as out:
-                out.write("===== FreqShift - Extracted RES Metadata =====\n")
-                out.write(f"Source File: {os.path.basename(input_file)}\n\n")
-                out.write("Detected Strings:\n")
-                out.write("-----------------\n")
-                for s in readable_strings:
-                    out.write(f"{s}\n")
-
+            extract_assets_from_res(input_file)
         elif engine == "OGG-FakeDecoder":
             fake_ogg_decoder(input_file, output_ext)
-
         else:
             raise ValueError("Unsupported engine")
-
-        if engine != "OGG-FakeDecoder":
+        if engine != "OGG-FakeDecoder" and engine != "TEX-RES-Binder":
             messagebox.showinfo(f"{APP_NAME} - Success", f"File converted to: {output_path}")
-
     except Exception as e:
         messagebox.showerror(f"{APP_NAME} - Error", str(e))
 
@@ -145,7 +176,7 @@ def start_conversion():
         return
     progress["maximum"] = len(dropped_files)
     progress["value"] = 0
-    root.update_idletasks()
+    root.update_idletask()
 
     successes = 0
     for i, file in enumerate(dropped_files):
@@ -158,8 +189,7 @@ def start_conversion():
         except Exception as e:
             print(f"[Error] {file}: {e}")
         progress["value"] += 1
-        root.update_idletasks()
-
+        root.update_idletask()
     messagebox.showinfo("FreqShift", f"Converted {successes} of {len(dropped_files)} files.")
     root.destroy()
 
@@ -170,13 +200,11 @@ def show_gui_window():
     root.title("FreqShift - Drop Files to Convert")
     root.geometry("400x250")
     root.resizable(False, False)
-
     tk.Label(root, text="Drag and drop files or click browse", font=("Arial", 12)).pack(pady=10)
     tk.Button(root, text="Browse Files", command=browse_files).pack(pady=5)
     file_label = tk.Label(root, text="No files selected.", font=("Arial", 10))
     file_label.pack(pady=10)
     tk.Button(root, text="Convert", command=start_conversion, bg="green", fg="white", width=20).pack(pady=10)
-
     progress = ttk.Progressbar(root, orient=tk.HORIZONTAL, length=300, mode='determinate')
     progress.pack(pady=10)
     root.mainloop()
