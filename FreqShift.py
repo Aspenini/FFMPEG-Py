@@ -1,3 +1,5 @@
+# Updated FreqShift script logic with engine first, then output format per engine
+
 import os
 import sys
 import subprocess
@@ -6,8 +8,15 @@ from tkinter import simpledialog, messagebox
 import ffmpeg
 
 APP_NAME = "FreqShift"
-output_formats = ["wav", "ogg", "mp3", "flac"]
-converter_options = ["FFmpeg", "VGMStream"]
+
+# Format lists per engine
+ffmpeg_formats = ["mp3", "mp4", "wav", "ogg", "mkv", "flac", "mov", "webm", "gif"]
+vgmstream_formats = ["wav"]  # safest bet
+
+converter_options = {
+    "FFmpeg": ffmpeg_formats,
+    "VGMStream": vgmstream_formats
+}
 
 # Path to vgmstream
 def get_script_path():
@@ -47,27 +56,28 @@ def convert_smart(input_file):
     root = tk.Tk()
     root.withdraw()
 
-    # Ask for output format
-    fmt = simpledialog.askstring(
-        f"{APP_NAME} - Output Format",
-        f"Convert to which format?\nOptions: {', '.join(output_formats)}"
+    # Ask for engine first
+    engine = simpledialog.askstring(
+        f"{APP_NAME} - Choose Engine",
+        f"Which engine do you want to use?\nOptions: {', '.join(converter_options.keys())}"
     )
-    if fmt not in output_formats:
-        messagebox.showerror(f"{APP_NAME} - Invalid Format", f"'{fmt}' is not supported.")
+    if engine not in converter_options:
+        messagebox.showerror(f"{APP_NAME} - Error", f"Invalid engine: {engine}")
         return
 
-    # Ask for converter
-    converter = simpledialog.askstring(
-        f"{APP_NAME} - Converter",
-        f"Use which converter?\nOptions: {', '.join(converter_options)}"
+    # Show output formats valid for selected engine
+    valid_formats = converter_options[engine]
+    fmt = simpledialog.askstring(
+        f"{APP_NAME} - Output Format",
+        f"Convert to which format using {engine}?\nOptions: {', '.join(valid_formats)}"
     )
     root.destroy()
 
-    if converter not in converter_options:
-        messagebox.showerror(f"{APP_NAME} - Invalid Converter", f"'{converter}' is not supported.")
+    if fmt not in valid_formats:
+        messagebox.showerror(f"{APP_NAME} - Error", f"Format '{fmt}' not supported by {engine}.")
         return
 
-    if converter == "VGMStream":
+    if engine == "VGMStream":
         use_vgmstream(input_file, fmt)
     else:
         use_ffmpeg(input_file, fmt)
