@@ -1,1 +1,1 @@
-pyinstaller --onefile ffmpeg-py.py
+pyinstaller --onefile FreqShift.py
