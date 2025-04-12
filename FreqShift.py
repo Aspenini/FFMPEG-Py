@@ -7,9 +7,9 @@ import ffmpeg
 
 APP_NAME = "FreqShift"
 output_formats = ["wav", "ogg", "mp3", "flac"]
-vgmstream_exts = [".btsnd", ".fsb", ".wem", ".genh", ".brstm", ".bcstm"]
+converter_options = ["FFmpeg", "VGMStream"]
 
-# Adjusted path logic for local running
+# Path to vgmstream
 def get_script_path():
     return os.path.dirname(os.path.abspath(sys.argv[0]))
 
@@ -46,17 +46,28 @@ def convert_smart(input_file):
 
     root = tk.Tk()
     root.withdraw()
+
+    # Ask for output format
     fmt = simpledialog.askstring(
         f"{APP_NAME} - Output Format",
         f"Convert to which format?\nOptions: {', '.join(output_formats)}"
     )
-    root.destroy()
-
     if fmt not in output_formats:
         messagebox.showerror(f"{APP_NAME} - Invalid Format", f"'{fmt}' is not supported.")
         return
 
-    if ext in vgmstream_exts:
+    # Ask for converter
+    converter = simpledialog.askstring(
+        f"{APP_NAME} - Converter",
+        f"Use which converter?\nOptions: {', '.join(converter_options)}"
+    )
+    root.destroy()
+
+    if converter not in converter_options:
+        messagebox.showerror(f"{APP_NAME} - Invalid Converter", f"'{converter}' is not supported.")
+        return
+
+    if converter == "VGMStream":
         use_vgmstream(input_file, fmt)
     else:
         use_ffmpeg(input_file, fmt)
