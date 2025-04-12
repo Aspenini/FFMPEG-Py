@@ -1,4 +1,3 @@
-# Fix missing imports and reassemble full batch-ready version
 import os
 import sys
 import subprocess
@@ -9,12 +8,15 @@ from PIL import Image
 
 APP_NAME = "FreqShift"
 
+# Supported engines and their output format options
 engine_formats = {
     "FFmpeg": ["mp3", "mp4", "wav", "ogg", "mkv", "flac", "mov", "webm", "gif"],
     "VGMStream": ["wav"],
     "TEX-Stripper": ["dds", "png", "wav"],
     "TEX-StreamInfo": ["txt"],
     "TEX-RES-Binder": ["meta"],
+    "TEX-Script": ["txt"],
+    "TEX-CharMap": ["txt"],
     "OGG-FakeDecoder": ["wav"]
 }
 
@@ -27,7 +29,7 @@ def detect_engine(input_file):
     ext = os.path.splitext(input_file)[1].lower()
     try:
         with open(input_file, "rb") as f:
-            head = f.read(16)
+            head = f.read(128)
             if ext in [".wem", ".fsb", ".bnk"]:
                 return "VGMStream"
             elif ext == ".tex":
@@ -35,7 +37,11 @@ def detect_engine(input_file):
                     return "TEX-Stripper"
                 elif head.startswith(b'StreamInfo'):
                     return "TEX-StreamInfo"
-                elif head.startswith(b'.CCH') or head.startswith(b'\x00'):
+                elif head.startswith(b'Init();') or b'Init();' in head:
+                    return "TEX-Script"
+                elif b'SeamusMcFly' in head or b'Character "' in head:
+                    return "TEX-CharMap"
+                elif b'B0X' in head or b'HSER' in head:
                     return "TEX-RES-Binder"
                 else:
                     return "TEX-RES-Binder"
@@ -89,14 +95,14 @@ def convert_file(engine, input_file, output_ext):
         elif output_ext == "wav":
             with open(output_path, "wb") as f:
                 f.write(b"RIFF....WAVEfmt ")
-    elif engine == "TEX-StreamInfo":
+    elif engine in ["TEX-StreamInfo", "TEX-CharMap", "TEX-Script"]:
         with open(input_file, "rb") as f:
             data = f.read()
         with open(output_path, "w", encoding="utf-8") as out:
             out.write(data.decode("utf-8", errors="ignore"))
     elif engine == "TEX-RES-Binder":
         with open(output_path, "w", encoding="utf-8") as out:
-            out.write("RES/IMG binder, not directly usable")
+            out.write("RES/IMG binder or compressed asset. No direct image data available.")
     elif engine == "OGG-FakeDecoder":
         fake_ogg_decoder(input_file, output_ext)
     else:
@@ -141,11 +147,9 @@ def batch_engine_selector(input_files):
     tk.Button(engine_window, text="🔍 Auto Detect Engine", width=30, bg="lightblue", command=auto_detect_and_run).pack(pady=10)
     engine_window.mainloop()
 
-# Launch script
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         tk.Tk().withdraw()
         messagebox.showerror(APP_NAME, "Drag and drop one or more files onto this script.")
     else:
         batch_engine_selector(sys.argv[1:])
-
