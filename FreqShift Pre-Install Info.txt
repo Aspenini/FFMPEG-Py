@@ -1,9 +1,6 @@
 FreqShift - Universal Game Audio & Texture Converter
 ────────────────────────────────────────────────────
 
-Developed by: Aspenini
-Version: 0.1
-
 FreqShift is a powerful tool for converting obscure or proprietary game files 
 into readable and usable formats.
 
