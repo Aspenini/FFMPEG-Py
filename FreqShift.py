@@ -2,13 +2,13 @@ import os
 import sys
 import subprocess
 import tkinter as tk
-from tkinter import messagebox, simpledialog
+from tkinter import messagebox, simpledialog, filedialog, ttk
 import ffmpeg
 from PIL import Image
 
 APP_NAME = "FreqShift"
+VGMS_CLI_PATH = os.path.join(os.path.dirname(os.path.abspath(__file__)), "vgmstream", "vgmstream-cli.exe")
 
-# Supported engines and their output format options
 engine_formats = {
     "FFmpeg": ["mp3", "mp4", "wav", "ogg", "mkv", "flac", "mov", "webm", "gif"],
     "VGMStream": ["wav"],
@@ -19,11 +19,6 @@ engine_formats = {
     "TEX-CharMap": ["txt"],
     "OGG-FakeDecoder": ["wav"]
 }
-
-def get_script_path():
-    return os.path.dirname(os.path.abspath(sys.argv[0]))
-
-VGMS_CLI_PATH = os.path.join(get_script_path(), "vgmstream", "vgmstream-cli.exe")
 
 def detect_engine(input_file):
     ext = os.path.splitext(input_file)[1].lower()
@@ -57,21 +52,18 @@ def detect_engine(input_file):
 def fake_ogg_decoder(input_file, output_ext):
     base = os.path.splitext(input_file)[0]
     output_path = f"{base}.{output_ext}"
-    try:
-        with open(input_file, "rb") as f:
-            data = f.read()
-        if data.startswith(b'IDSP') or b'I_AM_PADDING' in data:
-            audio_start = data.find(b'I_AM_PADDING') + len(b'I_AM_PADDING') if b'I_AM_PADDING' in data else 0
-            raw_data = data[audio_start:]
-            fake_wav = b'RIFF' + b'\x00\x00\x00\x00' + b'WAVEfmt ' + b'\x10\x00\x00\x00\x01\x00\x01\x00' + \
-                       b'\x44\xAC\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data' + b'\x00\x00\x00\x00'
-            wav_data = fake_wav + raw_data
-            with open(output_path, "wb") as out:
-                out.write(wav_data)
-        else:
-            raise ValueError("Not a known fake OGG type.")
-    except Exception as e:
-        raise RuntimeError(f"OGG-FakeDecoder Error: {e}")
+    with open(input_file, "rb") as f:
+        data = f.read()
+    if data.startswith(b'IDSP') or b'I_AM_PADDING' in data:
+        audio_start = data.find(b'I_AM_PADDING') + len(b'I_AM_PADDING') if b'I_AM_PADDING' in data else 0
+        raw_data = data[audio_start:]
+        fake_wav = b'RIFF' + b'\x00\x00\x00\x00' + b'WAVEfmt ' + b'\x10\x00\x00\x00\x01\x00\x01\x00' + \
+                   b'\x44\xAC\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data' + b'\x00\x00\x00\x00'
+        wav_data = fake_wav + raw_data
+        with open(output_path, "wb") as out:
+            out.write(wav_data)
+    else:
+        raise ValueError("Not a known fake OGG")
 
 def convert_file(engine, input_file, output_ext):
     base = os.path.splitext(input_file)[0]
@@ -106,7 +98,59 @@ def convert_file(engine, input_file, output_ext):
     elif engine == "OGG-FakeDecoder":
         fake_ogg_decoder(input_file, output_ext)
     else:
-        raise ValueError("Unsupported engine or format")
+        raise ValueError("Unsupported engine")
+
+# === GUI MODE ===
+
+def browse_files():
+    global dropped_files
+    filenames = filedialog.askopenfilenames(title="Select files for FreqShift")
+    dropped_files = list(filenames)
+    file_label.config(text=f"{len(dropped_files)} file(s) selected.")
+
+def start_conversion():
+    if not dropped_files:
+        messagebox.showwarning("FreqShift", "Please select some files first.")
+        return
+    progress["maximum"] = len(dropped_files)
+    progress["value"] = 0
+    root.update_idletasks()
+
+    successes = 0
+    for i, file in enumerate(dropped_files):
+        engine = detect_engine(file)
+        formats = engine_formats.get(engine, [])
+        fmt = formats[0] if formats else "txt"
+        try:
+            convert_file(engine, file, fmt)
+            successes += 1
+        except Exception as e:
+            print(f"[Error] {file}: {e}")
+        progress["value"] += 1
+        root.update_idletasks()
+
+    messagebox.showinfo("FreqShift", f"Converted {successes} of {len(dropped_files)} files.")
+    root.destroy()
+
+def show_gui_window():
+    global root, file_label, progress, dropped_files
+    dropped_files = []
+    root = tk.Tk()
+    root.title("FreqShift - Drop Files to Convert")
+    root.geometry("400x250")
+    root.resizable(False, False)
+
+    tk.Label(root, text="Drag and drop files or click browse", font=("Arial", 12)).pack(pady=10)
+    tk.Button(root, text="Browse Files", command=browse_files).pack(pady=5)
+    file_label = tk.Label(root, text="No files selected.", font=("Arial", 10))
+    file_label.pack(pady=10)
+    tk.Button(root, text="Convert", command=start_conversion, bg="green", fg="white", width=20).pack(pady=10)
+
+    progress = ttk.Progressbar(root, orient=tk.HORIZONTAL, length=300, mode='determinate')
+    progress.pack(pady=10)
+    root.mainloop()
+
+# === DRAG/DROP MODE ===
 
 def batch_engine_selector(input_files):
     def run_engine(engine_name):
@@ -147,9 +191,10 @@ def batch_engine_selector(input_files):
     tk.Button(engine_window, text="🔍 Auto Detect Engine", width=30, bg="lightblue", command=auto_detect_and_run).pack(pady=10)
     engine_window.mainloop()
 
+# === ENTRY POINT ===
+
 if __name__ == "__main__":
     if len(sys.argv) < 2:
-        tk.Tk().withdraw()
-        messagebox.showerror(APP_NAME, "Drag and drop one or more files onto this script.")
+        show_gui_window()
     else:
         batch_engine_selector(sys.argv[1:])

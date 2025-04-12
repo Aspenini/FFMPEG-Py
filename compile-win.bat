@@ -14,7 +14,6 @@ call .venv\Scripts\activate.bat
 
 REM === Step 2: Install dependencies ===
 echo Installing requirements...
-pip install --upgrade pip
 pip install -r requirements.txt
 
 REM === Step 3: Build FreqShift executable ===
