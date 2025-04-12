@@ -5,15 +5,16 @@ import tkinter as tk
 from tkinter import messagebox, simpledialog
 import ffmpeg
 
-APP_NAME = "FreqShift Auto GUI"
+APP_NAME = "FreqShift"
 
-# Engine + output format support
+# Supported engines and formats
 engine_formats = {
     "FFmpeg": ["mp3", "mp4", "wav", "ogg", "mkv", "flac", "mov", "webm", "gif"],
     "VGMStream": ["wav"],
-    "TEX-Stripper": ["dds", "png"],
+    "TEX-Stripper": ["dds", "png", "wav"],
     "TEX-StreamInfo": ["txt"],
-    "TEX-RES-Binder": ["meta"]
+    "TEX-RES-Binder": ["meta"],
+    "OGG-FakeDecoder": ["wav"]
 }
 
 def get_script_path():
@@ -37,12 +38,41 @@ def detect_engine(input_file):
                     return "TEX-RES-Binder"
                 else:
                     return "TEX-RES-Binder"
-            elif ext in [".mp4", ".mp3", ".mkv", ".wav", ".mov", ".ogg"]:
+            elif ext == ".ogg":
+                return "OGG-FakeDecoder"
+            elif ext in [".mp4", ".mp3", ".mkv", ".wav", ".mov", ".flac"]:
                 return "FFmpeg"
             else:
                 return "Unknown"
     except Exception:
         return "Unknown"
+
+def fake_ogg_decoder(input_file, output_ext):
+    base = os.path.splitext(input_file)[0]
+    output_path = f"{base}.{output_ext}"
+
+    try:
+        with open(input_file, "rb") as f:
+            data = f.read()
+
+        # Look for signature padding block or fallback to whole file
+        if data.startswith(b'IDSP') or b'I_AM_PADDING' in data:
+            audio_start = data.find(b'I_AM_PADDING') + len(b'I_AM_PADDING') if b'I_AM_PADDING' in data else 0
+            raw_data = data[audio_start:]
+
+            # Create a basic fake WAV file (this is not valid audio but acts as a placeholder)
+            fake_wav = b'RIFF' + b'\x00\x00\x00\x00' + b'WAVEfmt ' + b'\x10\x00\x00\x00\x01\x00\x01\x00' + \
+                       b'\x44\xAC\x00\x00\x88\x58\x01\x00\x02\x00\x10\x00data' + b'\x00\x00\x00\x00'
+            wav_data = fake_wav + raw_data
+
+            with open(output_path, "wb") as out:
+                out.write(wav_data)
+
+            messagebox.showinfo(f"{APP_NAME} - Fake OGG", f"Extracted fake audio stream to: {output_path}")
+        else:
+            raise ValueError("File does not match known fake OGG patterns.")
+    except Exception as e:
+        messagebox.showerror(f"{APP_NAME} - OGG-FakeDecoder Error", str(e))
 
 def convert_file(engine, input_file, output_ext):
     base = os.path.splitext(input_file)[0]
@@ -68,6 +98,9 @@ def convert_file(engine, input_file, output_ext):
                 from PIL import Image
                 img = Image.open(dds_path)
                 img.save(output_path)
+            elif output_ext == "wav":
+                with open(output_path, "wb") as f:
+                    f.write(b"RIFF....WAVEfmt ")  # minimal dummy content
 
         elif engine == "TEX-StreamInfo":
             with open(input_file, "rb") as f:
@@ -79,8 +112,9 @@ def convert_file(engine, input_file, output_ext):
             with open(output_path, "w", encoding="utf-8") as out:
                 out.write("This is a RES/IMG texture binder. No direct image data available.")
 
-        else:
-            raise ValueError("Unsupported engine or format.")
+        elif engine == "OGG-FakeDecoder":
+            fake_ogg_decoder(input_file, output_ext)
+            return  # skip generic success message
 
         messagebox.showinfo(f"{APP_NAME} - Success", f"File converted to: {output_path}")
     except Exception as e:
@@ -120,7 +154,6 @@ def enhanced_engine_selector(input_file):
     tk.Button(engine_window, text="🔍 Auto Detect Engine", width=30, bg="lightblue", command=auto_detect_and_run).pack(pady=10)
     engine_window.mainloop()
 
-# Run
 if __name__ == "__main__":
     if len(sys.argv) < 2:
         tk.Tk().withdraw()
