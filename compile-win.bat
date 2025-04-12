@@ -1,1 +1,1 @@
-pyinstaller --onefile FreqShift.py
+pyinstaller --onefile --windowed --icon=img/wave.ico FreqShift.py
