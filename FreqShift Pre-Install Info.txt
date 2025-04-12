@@ -1,0 +1,31 @@
+FreqShift - Universal Game Audio & Texture Converter
+────────────────────────────────────────────────────
+
+Developed by: Aspenini
+Version: 0.1
+
+FreqShift is a powerful tool for converting obscure or proprietary game files 
+into readable and usable formats.
+
+It supports:
+ • .TEX files from LEGO Dimensions and other TT Games (Textures, Scripts, Metadata)
+ • .WEM audio from Wwise games (converts to .WAV)
+ • "Fake" or broken .OGG game files (decodes to usable audio)
+ • DDS texture stripping and conversion
+ • Auto-detection of engine format for each file
+ • Drag-and-drop batch conversion or GUI menu
+
+Included:
+ • vgmstream audio backend for WEM and FSB support
+ • ffmpeg support for video and sound conversion
+ • Custom texture/scripting/metadata engines for TT-based formats
+
+FreqShift will:
+ • Register itself to open .TEX files by default
+ • Install to Program Files
+ • Add Start Menu and Desktop shortcuts
+ • Launch into GUI mode when opened standalone
+
+────────────────────────────────────────────────────
+Thanks for using FreqShift.
+ - Aspenini
